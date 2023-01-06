@@ -32,6 +32,10 @@ Param(
     ,
     [Parameter(Mandatory=$false)]
     [string]
+    $Server=""
+    ,
+    [Parameter(Mandatory=$false)]
+    [string]
     $BackupFolder="."
     ,
     [Parameter(Mandatory=$false)]
@@ -69,7 +73,7 @@ function Backup-Acl {
     Param( 
         [Parameter(Mandatory=$true)]
         [string]
-        $Path
+        $FolderPath
         ,
         [Parameter(Mandatory=$true)]
         [string]
@@ -79,14 +83,32 @@ function Backup-Acl {
     $Backup = @()
 
     try {
-        $Acl = Get-Acl $Path
-        $Shares = Get-SmbShare | Where-Object {$_.Path -eq $Path} | Select-Object -ExpandProperty Name
+        $Acl = Get-Acl $FolderPath
+        $Shares = Get-SmbShare | Where-Object {$_.Path -eq $FolderPath} | Select-Object -ExpandProperty Name
         foreach ($Permission in $Acl.Access) {
-            foreach ($Share in $Shares) {
-                if (!$PermissionNotInherited -or ($PermissionNotInherited -and !$Permission.IsInherited)) {
+            if (!$PermissionNotInherited -or ($PermissionNotInherited -and !$Permission.IsInherited)) {
+                if ($Shares.Count -gt 0) {
+                    foreach ($Share in $Shares) {
+                        $Backup += [PSCustomObject]@{
+                            "Server" = $Server
+                            "Path" = $FolderPath
+                            "Share" = $Share
+                            "Owner" = $Acl.Owner
+                            "FileSystemRights" = $Permission.FileSystemRights
+                            "AccessControlType" = $Permission.AccessControlType
+                            "IdentityReference" = $Permission.IdentityReference
+                            "IsInherited" = $Permission.IsInherited
+                            "InheritanceFlags" = $Permission.InheritanceFlags
+                            "PropagationFlags" = $Permission.PropagationFlags
+                            "Exception" = ""
+                            } 
+                        }
+                } else {
                     $Backup += [PSCustomObject]@{
-                        "Path" = $Path
-                        "Share" = $Share
+                        "Server" = $Server
+                        "Path" = $FolderPath
+                        "Share" = ""
+                        "Owner" = $Acl.Owner
                         "FileSystemRights" = $Permission.FileSystemRights
                         "AccessControlType" = $Permission.AccessControlType
                         "IdentityReference" = $Permission.IdentityReference
@@ -95,13 +117,15 @@ function Backup-Acl {
                         "PropagationFlags" = $Permission.PropagationFlags
                         "Exception" = ""
                         } 
-                    }
                 }
             }
+        }
     } catch {
         $Backup += [PSCustomObject]@{
-            "Path" = $Path
+            "Server" = $Server
+            "Path" = $FolderPath
             "Share" = ""
+            "Owner" = ""
             "FileSystemRights" = ""
             "AccessControlType" = ""
             "IdentityReference" = ""
@@ -127,7 +151,7 @@ if ($BackupFileName -eq "") {
     $BackupFileName = "FolderAclBackup-$Now.csv"
 }
 
-Backup-Acl -Path $Path -Output "$BackupFolder\$BackupFileName"
+Backup-Acl -FolderPath $Path -Output "$BackupFolder\$BackupFileName"
 
 Write-Output "- Loading directory tree..."
 $Folders = Get-ChildItem $Path -Directory -Recurse -ErrorAction SilentlyContinue
@@ -136,8 +160,8 @@ $CurrentFolder = 0
 
 foreach ($Folder in $Folders) {
     $CurrentFolder++
-    Write-Progress -Id 0 -Activity "Scanning Folders" -PercentComplete ($CurrentFolder/$FolderCount*100) -Status "Scanning $Folder"
-    Backup-Acl -Path $Folder.FullName -Output "$BackupFolder\$BackupFileName"
+    Write-Progress -Id 0 -Activity "Scanning Folders" -PercentComplete ($CurrentFolder/$FolderCount*100) -Status "Scanning $($Folder.FullName)"
+    Backup-Acl -FolderPath $Folder.FullName -Output "$BackupFolder\$BackupFileName"
 }
 
 Write-Output "- Backup created - ""$BackupFolder\$BackupFileName"""
