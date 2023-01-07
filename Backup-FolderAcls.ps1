@@ -81,59 +81,59 @@ function Backup-Acl {
         )
 
     $Backup = @()
-
+    
     try {
         $Acl = Get-Acl $FolderPath
-        $Shares = Get-SmbShare | Where-Object {$_.Path -eq $FolderPath} | Select-Object -ExpandProperty Name
-        foreach ($Permission in $Acl.Access) {
-            if (!$PermissionNotInherited -or ($PermissionNotInherited -and !$Permission.IsInherited)) {
-                if ($Shares.Count -gt 0) {
-                    foreach ($Share in $Shares) {
-                        $Backup += [PSCustomObject]@{
-                            "Server" = $Server
-                            "Path" = $FolderPath
-                            "Share" = $Share
-                            "Owner" = $Acl.Owner
-                            "FileSystemRights" = $Permission.FileSystemRights
-                            "AccessControlType" = $Permission.AccessControlType
-                            "IdentityReference" = $Permission.IdentityReference
-                            "IsInherited" = $Permission.IsInherited
-                            "InheritanceFlags" = $Permission.InheritanceFlags
-                            "PropagationFlags" = $Permission.PropagationFlags
-                            "Exception" = ""
-                            } 
-                        }
-                } else {
-                    $Backup += [PSCustomObject]@{
-                        "Server" = $Server
-                        "Path" = $FolderPath
-                        "Share" = ""
-                        "Owner" = $Acl.Owner
-                        "FileSystemRights" = $Permission.FileSystemRights
-                        "AccessControlType" = $Permission.AccessControlType
-                        "IdentityReference" = $Permission.IdentityReference
-                        "IsInherited" = $Permission.IsInherited
-                        "InheritanceFlags" = $Permission.InheritanceFlags
-                        "PropagationFlags" = $Permission.PropagationFlags
-                        "Exception" = ""
-                        } 
-                }
-            }
-        }
     } catch {
-        $Backup += [PSCustomObject]@{
-            "Server" = $Server
-            "Path" = $FolderPath
-            "Share" = ""
-            "Owner" = ""
+        $AclError = $Error[0].Exception.Message
+    }
+
+    try {
+        $Shares = Get-SmbShare | Where-Object {$_.Path -eq $FolderPath} | Select-Object -ExpandProperty Name
+    } catch {
+        $ShareError = $Error[0].Exception.Message
+    }
+
+    if (!$Shares) {
+        $Shares = @("")
+    }
+
+    if ($AclError) {
+        $Owner = ""
+        $Permissions = [PSCustomObject]@{
             "FileSystemRights" = ""
             "AccessControlType" = ""
             "IdentityReference" = ""
             "IsInherited" = ""
             "InheritanceFlags" = ""
             "PropagationFlags" = ""
-            "Exception" = $Error[0].Exception.Message
             }
+    } else {
+        $Permissions = $Acl.Access
+        $Owner = $Acl.Owner
+    }
+
+    foreach ($Permission in $Permissions) {
+        if ($PermissionNotInherited -and $Permission.IsInherited -and !$AclError -and !$ShareError) {
+          continue   
+        }
+
+        foreach ($Share in $Shares) {
+            $Backup += [PSCustomObject]@{
+                "Server" = $Server
+                "Path" = $FolderPath
+                "Share" = $Share
+                "Owner" = $Owner
+                "FileSystemRights" = $Permission.FileSystemRights
+                "AccessControlType" = $Permission.AccessControlType
+                "IdentityReference" = $Permission.IdentityReference
+                "IsInherited" = $Permission.IsInherited
+                "InheritanceFlags" = $Permission.InheritanceFlags
+                "PropagationFlags" = $Permission.PropagationFlags
+                "Exceptions" = "$AclError`n$ShareError"
+                } 
+        }
+
     }
 
     $Backup | Export-Csv -Path $Output -NoTypeInformation -Append
