@@ -2,20 +2,16 @@
 #
 # Arguments
 # ===================
-# -Path          | 
-# -ReportFolder  |
-# -NotifyAddress | 
-# -FromAddress   | 
-# -Age           | 
-# -TargetDate    |
-# -TestMode      | 
-# -FoldersOnly   |
-# -ShowGoodFiles |
+# -Path <path>         | 
+# -ReportFolder <path> |
+# -Age <n>             | 
+# -Recurse             |
+# -Hidden              |
+# -KeepEmptyFolders    |
+# -TestMode            | 
 
 Param( 
   [Parameter(Mandatory = $false)][string]$Path, 
-  [Parameter(Mandatory = $false)][string]$NotifyAddress,
-  [Parameter(Mandatory = $false)][string]$FromAddress,
   [Parameter(Mandatory = $false)][string]$ReportPath = ".",
   [Parameter(Mandatory = $false)][int]$Age = 30,
   [Parameter(Mandatory = $false)][switch]$Recurse,
