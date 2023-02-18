@@ -70,68 +70,116 @@ function Format-Size {
 # Function handles deleting what should be an empty folder
 function Remove-Folder {
   Param( 
-    [Parameter(Mandatory = $true)]$EmptyFolder
+    [Parameter(Mandatory=$true)]$Folder,
+    [Parameter(Mandatory=$false)][switch]$ShowOutput
   )  
 
+  if ($ShowOutput) {
+    Write-Output "[REMOVE] $Folder"
+  }
+
+  $TargetFolder = Get-Item $Folder
+
   try {
-    Remove-Item -LiteralPath $EmptyFolder.FullName -Force:$Hidden -WhatIf:$TestMode -Confirm:$false
+    Remove-Item -LiteralPath $TargetFolder.FullName -Force:$Hidden -WhatIf:$TestMode -Confirm:$false
   } catch {
     $Report += [PSCustomObject]@{
       "Type"   = "Error"
-      "Path"     = $EmptyFolder.FullName
+      "Path"     = $TargetFolder.FullName
       "Size"     = ""
       "Created"  = ""
       "Accessed" = ""
       "Modified" = ""
       "Action"   = "Error"
-      "Detail"   = $Error[0].Exception.Message
+      "Detail"   = $_.Exception.Message
     }
-    return $false
+    exit
   }
 
   $Report += [PSCustomObject]@{
     "Type"   = "Folder"
-    "Path"     = $EmptyFolder.FullName
+    "Path"     = $TargetFolder.FullName
     "Size"     = ""
-    "Created"  = $EmptyFolder.CreationTime
-    "Accessed" = $EmptyFolder.LastAccessTime
-    "Modified" = $EmptyFolder.LastWriteTime
+    "Created"  = $TargetFolder.CreationTime
+    "Accessed" = $TargetFolder.LastAccessTime
+    "Modified" = $TargetFolder.LastWriteTime
     "Action"   = if ($TestMode) { "Report" } else { "Delete" }
   }
-
-  return $true
 }
 
 # Function determines if a folder can be deleted by checking whether it has any children (folders or files)
 # and if it passes the age requirement
 function Test-Folder {
   Param (
-    [Parameter(Mandatory = $true)]$Folder
+    [Parameter(Mandatory=$true)][string]$Folder,
+    [Parameter(Mandatory=$false)][switch]$ShowOutput,
+    [Parameter(Mandatory=$false)][switch]$Recurse,
+    [Parameter(Mandatory=$false)][switch]$DeleteEmpty
   )
+
+  if ($ShowOutput) {
+    Write-Output "[TEST] $Folder"
+  }
+  
+  # Grab these before we start messing in sub-folders
+  $CreatedDate = (Get-Item $Folder).CreationTime
+  $AccessedDate = (Get-Item $Folder).LastAccessTime
+  $ModifiedDate = (Get-Item $Folder).LastWriteTime
 
   # If the script was run with the -Recurse switch, we will drill down into all the child folders,
   # test them for "deletability" and then delete them if they pass.
   if ($Recurse) {
-    $Children = Get-ChildItem -LiteralPath $Folder.FullName -Force:$Hidden | Where-Object { $_.PSIsContainer -eq $true }
+    $Children = Get-ChildItem -LiteralPath $Folder -Force:$Hidden | Where-Object { $_.PSIsContainer -eq $true } | Select-Object -ExpandProperty FullName
     foreach ($Child in $Children) {
-      if ($(Test-Folder -Folder $Child).value) {
-        Remove-Folder -Folder $Child
-      }
+      Test-Folder -Folder $Child -ShowOutput -Recurse:$Recurse -DeleteEmpty:$DeleteEmpty
     }
   }
 
   # If there are any children (files or folders), the test fails
-  if ($(Get-ChildItem -LiteralPath $Folder.FullName -Force)) {
-    return $false
+  if ($(Get-ChildItem -LiteralPath $Folder -Force)) {
+    exit
   }
 
   # If the folder is not old enough, the test fails
-  if ($Folder.LastWriteTime -ge $ExpirationDate) {
-    return $false
+  if ($AccessedDate -ge $ExpirationDate) {
+    exit
   }
 
   # If you've reached this point, all tests must have passed!
-  return $true
+  if ($DeleteEmpty) {
+    try {
+      Remove-Folder $Folder -ShowOutput:$ShowOutput
+    } catch {
+      # Hit an error during the delete. Capture it.
+      $Report += [PSCustomObject]@{
+        "Type"        = "Error"
+        "Path"        = $Folder
+        "Size"        = ""
+        "SizeInBytes" = ""
+        "Created"     = ""
+        "Accessed"    = ""
+        "Modified"    = ""
+        "Action"      = "Error"
+        "Detail"      = $_.Exception.Message
+      }
+    }
+
+    # Deletion must have been successful. Add it to the log.
+    $Report += [PSCustomObject]@{
+      "Type"        = "Folder"
+      "Path"        = $Folder
+      "Size"        = ""
+      "SizeInBytes" = ""
+      "Created"     = $CreatedDate
+      "Accessed"    = $AccessedDate
+      "Modified"    = $ModifiedDate
+      "Action"      = if ($TestMode) { "Report" } else { "Delete" }
+      "Detail"      = ""
+    }
+
+    # Update our deleted folder count
+    $FoldersRemoved ++
+  }
 }
 
 $Now = Get-Date -Format "yyyyMMddHHmm"
@@ -167,6 +215,7 @@ $OldFiles = Get-ChildItem -Path $Path -Recurse:$Recurse -Force:$Hidden | Where-O
 
 # Initialize the variable to store the amount of space successfully reclaimed
 $RecoveredSpace = 0
+$FoldersRemoved = 0
 
 # Start iterating through all of the files
 foreach ($OldFile in $OldFiles) {
@@ -175,7 +224,7 @@ foreach ($OldFile in $OldFiles) {
   } catch {
     # Hit an error during the delete. Capture it and immediately loop on to the next file
     $Report += [PSCustomObject]@{
-      "Type"      = "Error"
+      "Type"        = "Error"
       "Path"        = $OldFile.FullName
       "Size"        = ""
       "SizeInBytes" = ""
@@ -183,14 +232,14 @@ foreach ($OldFile in $OldFiles) {
       "Accessed"    = ""
       "Modified"    = ""
       "Action"      = "Error"
-      "Detail"      = $Error[0].Exception.Message
+      "Detail"      = $_.Exception.Message
     }
     continue
   }
 
   # Deletion must have been successful. Add it to the log.
   $Report += [PSCustomObject]@{
-    "Type"      = "File"
+    "Type"        = "File"
     "Path"        = $OldFile.FullName
     "Size"        = Format-Size $OldFile.Length
     "SizeInBytes" = $OldFile.Length
@@ -207,7 +256,7 @@ foreach ($OldFile in $OldFiles) {
 
 # All appropriate files deleted so let's report how we did.
 $Report += [PSCustomObject]@{
-  "Type"      = "Info"
+  "Type"        = "Info"
   "Path"        = ""
   "Size"        = ""
   "SizeInBytes" = ""
@@ -220,22 +269,16 @@ $Report += [PSCustomObject]@{
 
 # If we deleting empty folders...
 if (!$KeepEmptyFolders) {
-  # Initialize variable to keep track of how many empty folders we end up deleting
-  $FoldersRemoved = 0
-
-  # Get a list of all of the first-level folders. The Test-Folder function will handle folders
+   # Get a list of all of the first-level folders. The Test-Folder function will handle folders
   # further down if the -Recurse switch was passed
-  $Folders = Get-ChildItem -Path $Path -Force:$Hidden | Where-Object { $_.PSIsContainer -eq $true }
+  $Folders = Get-ChildItem -Path $Path -Force:$Hidden | Where-Object { $_.PSIsContainer -eq $true } | Select-Object -ExpandProperty FullName
   foreach ($Folder in $Folders) {
-    if (Test-Folder -Folder $Folder) {
-      # If the folder passed the tests, delete it. If successfully deleted, increment our counter.
-      if (Remove-Folder -EmptyFolder $Folder) { $FoldersRemoved ++ }
-    }
+    Test-Folder -Folder $Folder -DeleteEmpty:$(!$KeepEmptyFolders) -Recurse:$Recurse
   }
 
   # Folder cleanup has completed. Let's report how we did.
   $Report += [PSCustomObject]@{
-    "Type"      = "Info"
+    "Type"        = "Info"
     "Path"        = ""
     "Size"        = ""
     "SizeInBytes" = ""
