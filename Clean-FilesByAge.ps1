@@ -1,14 +1,17 @@
-# Clean-FilesByAge.ps1
-#
-# Arguments
-# ===================
-# -Path <path>         | Root folder path that the script will operate on
-# -ReportFolder <path> | Path where the script will save a report of its actions
-# -Age <n>             | Maximum age in days for a file or folder for it to be considered for deletion
-# -Recurse             | Cause the script to recursively search subfolders for files and folders to delete
-# -Hidden              | Cause the script to delete hidden files and folders
-# -KeepEmptyFolders    | Cause the script to keep empty folders even if they are older than the specified age
-# -TestMode            | Cause the script to only report on the files and folders it would have deleted, but not actually delete them
+<# 
+Clean-FilesByAge.ps1
+
+Arguments
+===================
+-Path <path>         | Root folder path that the script will operate on
+-ReportFolder <path> | Path where the script will save a report of its actions
+-Age <n>             | Maximum age in days for a file or folder for it to be considered for deletion
+-Recurse             | Cause the script to recursively search subfolders for files and folders to delete
+-Hidden              | Cause the script to delete hidden files and folders
+-KeepEmptyFolders    | Cause the script to keep empty folders even if they are older than the specified age
+-TestMode            | Cause the script to only report on the files and folders it would have deleted, but not actually delete them
+-ShowDetail          | Displays processing notes in console
+#>
 
 Param( 
   [Parameter(Mandatory = $false)][string]$Path, 
@@ -51,9 +54,9 @@ if ($ReportPath -and !(Test-Path -Path $ReportPath)) {
 }
 
 # Initialize Global variables
-$global:Report = @()
+$global:Report         = @()
 $global:FoldersRemoved = 0
-$global:Action = if ($TestMode) { "Report" } else { "Delete" }
+$global:Action         = if ($TestMode) { "Report" } else { "Delete" }
 
 # Initialize other variables
 $Now = Get-Date -Format "yyyyMMddHHmm"
@@ -81,8 +84,7 @@ function Format-Size {
 # Function handles deleting what should be an empty folder
 function Remove-Folder {
   Param( 
-    [Parameter(Mandatory=$true)]$Folder,
-    [Parameter(Mandatory=$false)][switch]$ShowOutput
+    [Parameter(Mandatory=$true)]$Folder
   )  
 
   $TargetFolder = Get-Item -LiteralPath "$Folder" -Force:$Hidden
@@ -119,7 +121,7 @@ function Remove-Folder {
     "SizeInBytes" = ""
     "Created"     = $CreatedDate
     "Accessed"    = $AccessedDate
-    "Modified"    = ModifiedDate
+    "Modified"    = $ModifiedDate
     "Action"      = $global:Action
     "Detail"      = ""
   }
