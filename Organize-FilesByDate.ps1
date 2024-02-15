@@ -16,8 +16,7 @@ Param(
   [Parameter(Mandatory = $false)][string]$Destination = $(Get-Location).Path, 
   [Parameter(Mandatory = $false)][string]$Filemask = "*.*", 
   [Parameter(Mandatory = $false)][switch]$Recurse,
-  [Parameter(Mandatory = $false)][switch]$TestMode,
-  [Parameter(Mandatory = $false)][switch]$ShowDetail
+  [Parameter(Mandatory = $false)][switch]$TestMode
 )
 
 # Make sure the source path exists. Exit if it does not.
@@ -56,7 +55,7 @@ foreach ($File in $Files) {
     $DestinationPath = Join-Path -Path $MonthFolder -ChildPath $File.Name
 
     Write-Host "Moving ""$File"" to $DestinationPath..."
-    Move-Item -Path $File.FullName -Destination $DestinationPath -Force
+    Move-Item -Path $File.FullName -Destination $DestinationPath -Force -TestMode:$TestMode
 }
 
 Write-Host "Files have been organized into folders based on their modified dates."
