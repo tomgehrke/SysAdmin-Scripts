@@ -55,7 +55,7 @@ foreach ($File in $Files) {
     $DestinationPath = Join-Path -Path $MonthFolder -ChildPath $File.Name
 
     Write-Host "Moving ""$File"" to $DestinationPath..."
-    Move-Item -Path $File.FullName -Destination $DestinationPath -Force -TestMode:$TestMode
+    Move-Item -Path $File.FullName -Destination $DestinationPath -Force -WhatIf:$TestMode
 }
 
 Write-Host "Files have been organized into folders based on their modified dates."
